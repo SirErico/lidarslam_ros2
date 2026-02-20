@@ -25,21 +25,13 @@ def generate_launch_description():
         package='scanmatcher',
         executable='scanmatcher_node',
         parameters=[main_param_dir],
-        remappings=[
-            ('input_cloud', 'j100_0000/sensors/lidar3d_0/points'),
-            ('/tf', '/j100_0000/tf'),
-            ('/tf_static', '/j100_0000/tf_static'),
-        ],
         output='screen'
         )
 
     tf = launch_ros.actions.Node(
         package='tf2_ros',
         executable='static_transform_publisher',
-        arguments=['0','0','0','0','0','0','1','base_link','lidar3d_0_laser'],
-        remappings=[
-            ('/tf_static', '/j100_0000/tf_static'),
-        ]
+        arguments=['0','0','0','0','0','0','1','leo01/base_link','leo01/livox_hap_model_link']
         )
 
 
@@ -47,10 +39,6 @@ def generate_launch_description():
         package='graph_based_slam',
         executable='graph_based_slam_node',
         parameters=[main_param_dir],
-        remappings=[
-            ('/tf', '/j100_0000/tf'),
-            ('/tf_static', '/j100_0000/tf_static'),
-        ],
         output='screen'
         )
     

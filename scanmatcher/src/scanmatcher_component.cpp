@@ -323,10 +323,11 @@ void ScanMatcherComponent::receiveCloud(
     geometry_msgs::msg::TransformStamped odom_trans;
     try {
       odom_trans = tfbuffer_.lookupTransform(
-        odom_frame_id_, robot_frame_id_, tf2_ros::fromMsg(
-          stamp));
+        odom_frame_id_, robot_frame_id_, tf2_ros::fromMsg(stamp),
+        tf2::durationFromSec(0.1));
     } catch (tf2::TransformException & e) {
       RCLCPP_ERROR(this->get_logger(), "%s", e.what());
+      return;  // Skip this scan if odom transform not available
     }
     Eigen::Affine3d odom_affine = tf2::transformToEigen(odom_trans);
     Eigen::Matrix4f odom_mat = odom_affine.matrix().cast<float>();
@@ -389,13 +390,45 @@ void ScanMatcherComponent::publishMapAndPose(
   if(publish_tf_){
     geometry_msgs::msg::TransformStamped transform_stamped;
     transform_stamped.header.stamp = stamp;
-    transform_stamped.header.frame_id = global_frame_id_;
-    transform_stamped.child_frame_id = robot_frame_id_;
-    transform_stamped.transform.translation.x = position.x();
-    transform_stamped.transform.translation.y = position.y();
-    transform_stamped.transform.translation.z = position.z();
-    transform_stamped.transform.rotation = quat_msg;
-    broadcaster_.sendTransform(transform_stamped);
+    
+    if (use_odom_) {
+      // When using odom, publish map->odom transform
+      // We have: map->base_link (from SLAM) and odom->base_link (from TF)
+      // We need: map->odom = map->base_link * inverse(odom->base_link)
+      try {
+        geometry_msgs::msg::TransformStamped odom_to_base = tfbuffer_.lookupTransform(
+          odom_frame_id_, robot_frame_id_, tf2_ros::fromMsg(stamp),
+          tf2::durationFromSec(0.2));
+        
+        Eigen::Affine3d odom_to_base_affine = tf2::transformToEigen(odom_to_base);
+        Eigen::Affine3d map_to_base_affine = Eigen::Affine3d::Identity();
+        map_to_base_affine.translation() = position;
+        map_to_base_affine.linear() = rot_mat;
+        
+        // map->odom = map->base_link * inverse(odom->base_link)
+        Eigen::Affine3d map_to_odom_affine = map_to_base_affine * odom_to_base_affine.inverse();
+        
+        transform_stamped.header.frame_id = global_frame_id_;
+        transform_stamped.child_frame_id = odom_frame_id_;
+        transform_stamped.transform.translation.x = map_to_odom_affine.translation().x();
+        transform_stamped.transform.translation.y = map_to_odom_affine.translation().y();
+        transform_stamped.transform.translation.z = map_to_odom_affine.translation().z();
+        Eigen::Quaterniond map_to_odom_quat(map_to_odom_affine.rotation());
+        transform_stamped.transform.rotation = tf2::toMsg(map_to_odom_quat);
+        broadcaster_.sendTransform(transform_stamped);
+      } catch (tf2::TransformException & e) {
+        RCLCPP_WARN(this->get_logger(), "Could not get odom->base_link for map->odom publish: %s", e.what());
+      }
+    } else {
+      // When not using odom, publish map->base_link directly
+      transform_stamped.header.frame_id = global_frame_id_;
+      transform_stamped.child_frame_id = robot_frame_id_;
+      transform_stamped.transform.translation.x = position.x();
+      transform_stamped.transform.translation.y = position.y();
+      transform_stamped.transform.translation.z = position.z();
+      transform_stamped.transform.rotation = quat_msg;
+      broadcaster_.sendTransform(transform_stamped);
+    }
   }
 
   corrent_pose_stamped_.header.stamp = stamp;
