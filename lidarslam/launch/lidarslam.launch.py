@@ -54,11 +54,11 @@ def generate_launch_description():
         output='screen'
         )
     
-    rviz = launch_ros.actions.Node(
-        package='rviz2',
-        executable='rviz2',
-        arguments=['-d', rviz_param_dir]
-        )
+    # rviz = launch_ros.actions.Node(
+    #     package='rviz2',
+    #     executable='rviz2',
+    #     arguments=['-d', rviz_param_dir]
+    #     )
 
 
     return launch.LaunchDescription([
@@ -69,5 +69,5 @@ def generate_launch_description():
         mapping,
         tf,
         graphbasedslam,
-        rviz,
+        # rviz,
             ])
